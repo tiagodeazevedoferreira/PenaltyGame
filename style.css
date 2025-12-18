@@ -12,9 +12,6 @@ body {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background-image: url('stadium.jpg');
-  background-size: cover;
-  background-position: center;
 }
 
 /* CONTAINER PRINCIPAL */
@@ -223,3 +220,4 @@ footer {
     width: min(20vw, 180px);
   }
 }
+
