@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pênalti Master - PWA</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+  <div id="gameContainer">
+    <header class="hud">
+      <div class="score">Gols: <span id="playerScore">0</span> x <span id="goalieScore">0</span></div>
+      <div id="countdown" class="countdown">3</div>
+      <div id="status">Toque e arraste para mirar!</div>
+      <div class="progress">
+        <span>Pênaltis: <span id="attempts">1</span>/5</div>
+      </div>
+    </header>
+    
+    <main id="gameArea">
+      <div id="goalZone"></div>
+      <div id="goalkeeper"></div>
+      <div id="ball"></div>
+      <div id="targetIndicator"></div>
+    </main>
+    
+    <footer>
+      <button id="restartBtn" style="display:none;">Nova Série</button>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
