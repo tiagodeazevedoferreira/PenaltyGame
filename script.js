@@ -13,36 +13,37 @@ class PenaltyGame {
     this.restartBtn = document.getElementById('restartBtn');
 
     // 11 zonas de chute
-    this.zones = [
-      {x: 0.1, y: 0.1, name: 'Canto Sup Esq'},    // 0
-      {x: 0.3, y: 0.1, name: 'Esq Superior'},     // 1
-      {x: 0.5, y: 0.1, name: 'Centro Superior'},  // 2
-      {x: 0.7, y: 0.1, name: 'Dir Superior'},     // 3
-      {x: 0.9, y: 0.1, name: 'Canto Sup Dir'},    // 4
-      {x: 0.1, y: 0.4, name: 'Esq Média'},        // 5
-      {x: 0.5, y: 0.4, name: 'Centro'},           // 6
-      {x: 0.9, y: 0.4, name: 'Dir Média'},        // 7
-      {x: 0.1, y: 0.7, name: 'Esq Inferior'},     // 8
-      {x: 0.5, y: 0.7, name: 'Chão Centro'},      // 9
-      {x: 0.9, y: 0.7, name: 'Dir Inferior'}      // 10
-    ];
+	this.zones = [
+	  {x: 0.03, y: 0.10, name: 'Canto Sup Esq'},    // quase encostado na trave esquerda
+	  {x: 0.28, y: 0.10, name: 'Esq Superior'},
+	  {x: 0.50, y: 0.10, name: 'Centro Superior'},
+	  {x: 0.72, y: 0.10, name: 'Dir Superior'},
+	  {x: 0.97, y: 0.10, name: 'Canto Sup Dir'},    // quase encostado na trave direita
+	  {x: 0.03, y: 0.40, name: 'Esq Média'},
+	  {x: 0.50, y: 0.40, name: 'Centro'},
+	  {x: 0.97, y: 0.40, name: 'Dir Média'},
+	  {x: 0.03, y: 0.70, name: 'Esq Inferior'},
+	  {x: 0.50, y: 0.70, name: 'Chão Centro'},
+	  {x: 0.97, y: 0.70, name: 'Dir Inferior'}
+	];
 
     // mapeamento zona -> sprite do goleiro
     this.zoneToGoalkeeperSprite = [
-      'left',   // 0 Canto sup esq
-      'left',   // 1 Esq superior
-      'high',   // 2 Centro superior
-      'right',  // 3 Dir superior
-      'right',  // 4 Canto sup dir
-      'left',   // 5 Esq média
-      'center', // 6 Centro médio
-      'right',  // 7 Dir média
-      'left',   // 8 Esq inferior
-      'down',   // 9 Chão centro
-      'right'   // 10 Dir inferior
+      'left',   // 0
+      'left',   // 1
+      'high',   // 2
+      'right',  // 3
+      'right',  // 4
+      'left',   // 5
+      'center', // 6
+      'right',  // 7
+      'left',   // 8
+      'down',   // 9
+      'right'   // 10
     ];
 
     this.shotSpots = [];
+    this.shotAreaRect = null;
 
     this.gameState = {
       playerScore: 0,
@@ -55,8 +56,9 @@ class PenaltyGame {
       isPlaying: false
     };
 
-    this.createShotSpots();
     this.init();
+    this.createShotSpots();
+    this.createShotAreaRect();
   }
 
   init() {
@@ -83,7 +85,7 @@ class PenaltyGame {
 
         setTimeout(() => {
           this.countdownEl.style.display = 'none';
-          this.statusEl.textContent = 'Toque no gol para chutar!';
+          this.statusEl.textContent = 'Toque em qualquer ponto do gol (círculos são as zonas).';
         }, 800);
       }
     }, 1000);
@@ -97,7 +99,7 @@ class PenaltyGame {
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
-    // Aceita apenas cliques na região do gol
+    // Aceita apenas cliques na região aproximada do gol
     if (x < 0.05 || x > 0.95 || y < 0.05 || y > 0.45) return;
 
     // zona mais próxima
@@ -162,7 +164,6 @@ class PenaltyGame {
       'goalkeeper-down'
     );
 
-    // aplica sprite e deslocamento conforme direção/altura
     let translateX = -50;
     let translateY = -50;
 
@@ -193,17 +194,15 @@ class PenaltyGame {
     const idx = this.gameState.targetZoneIndex;
     const targetZone = this.zones[idx];
 
-    // posição horizontal do chute (0 esquerda, 1 direita)
     const targetX = targetZone.x;
 
-    // posição efetiva do goleiro conforme sprite
     let goalieX;
     if (spriteKey === 'left') goalieX = 0.25;
     else if (spriteKey === 'right') goalieX = 0.75;
-    else goalieX = 0.5; // high, center, down
+    else goalieX = 0.5;
 
     const distance = Math.abs(targetX - goalieX);
-    const successChance = distance > 0.2; // margem pequena
+    const successChance = distance > 0.2;
 
     if (successChance && Math.random() > this.gameState.difficulty) {
       this.gameState.playerScore++;
@@ -236,7 +235,7 @@ class PenaltyGame {
     this.ball.style.opacity = '0';
     this.targetIndicator.classList.remove('active');
 
-    // volta goleiro para sprite central neutro
+    // goleiro volta ao centro
     this.goalkeeper.classList.remove(
       'goalkeeper-left',
       'goalkeeper-right',
@@ -285,6 +284,7 @@ class PenaltyGame {
     this.startNewAttempt();
   }
 
+  // cria e mantém os círculos indicativos das 11 zonas
   createShotSpots() {
     const placeSpots = () => {
       this.shotSpots.forEach((el) => el.remove());
@@ -311,11 +311,45 @@ class PenaltyGame {
     setTimeout(placeSpots, 50);
     window.addEventListener('resize', () => setTimeout(placeSpots, 50));
   }
+
+  // retângulo da área total de chute alinhado à trave
+  createShotAreaRect() {
+    const placeRect = () => {
+      if (this.shotAreaRect) {
+        this.shotAreaRect.remove();
+      }
+
+      const goalRect = this.goalZone.getBoundingClientRect();
+      const gameRect = this.gameArea.getBoundingClientRect();
+
+      const area = document.createElement('div');
+      area.className = 'shot-area';
+
+      // baseado na trave
+      const paddingX = goalRect.width * 0.02;      // margem lateral
+      const topOffset = goalRect.height * 0.02;    // começa um pouco abaixo da barra
+      const bottomOffset = goalRect.height * 0.04; // termina pouco acima da base
+
+      const x = goalRect.left - gameRect.left + paddingX;
+      const y = goalRect.top - gameRect.top + topOffset;
+      const w = goalRect.width - paddingX * 2;
+      const h = goalRect.height - topOffset - bottomOffset;
+
+      area.style.left = `${x}px`;
+      area.style.top = `${y}px`;
+      area.style.width = `${w}px`;
+      area.style.height = `${h}px`;
+
+      this.gameArea.appendChild(area);
+      this.shotAreaRect = area;
+    };
+
+    setTimeout(placeRect, 50);
+    window.addEventListener('resize', () => setTimeout(placeRect, 50));
+  }
 }
 
 window.addEventListener('load', () => {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js');
-  }
+  // Service Worker desativado em file://
   new PenaltyGame();
 });

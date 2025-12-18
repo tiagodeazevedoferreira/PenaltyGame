@@ -4,10 +4,10 @@
   padding: 0;
 }
 
-/* FUNDO COM ESTÁDIO */
+/* FUNDO SIMPLES */
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  background: #0f172a;
+  background: #0b1120;
   color: white;
   height: 100vh;
   display: flex;
@@ -21,11 +21,10 @@ body {
   flex-direction: column;
 }
 
-/* HUD RESPONSIVA */
+/* HUD */
 header.hud {
   padding: 0.5rem 0.75rem;
   background: rgba(15, 23, 42, 0.92);
-  backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(59, 130, 246, 0.3);
   display: flex;
   flex-wrap: wrap;
@@ -58,11 +57,11 @@ header.hud {
   position: relative;
   cursor: pointer;
   touch-action: manipulation;
-  background: radial-gradient(circle at top, rgba(15,23,42,0.6), rgba(15,23,42,0.95));
+  background: radial-gradient(circle at top, #020617, #020617 40%, #020617 100%);
   overflow: hidden;
 }
 
-/* TRAVE CENTRALIZADA – ADAPTA A VERTICAL/HORIZONTAL */
+/* TRAVE */
 #goalZone {
   position: absolute;
   left: 50%;
@@ -77,7 +76,7 @@ header.hud {
   background-position: center;
 }
 
-/* GOLEIRO BASE (posição neutra) */
+/* GOLEIRO */
 #goalkeeper {
   position: absolute;
   left: 50%;
@@ -93,7 +92,7 @@ header.hud {
   transition: transform 0.2s ease-out;
 }
 
-/* SPRITES DO GOLEIRO POR DIREÇÃO/ALTURA */
+/* SPRITES DO GOLEIRO */
 .goalkeeper-left {
   background-image: url('goalkeeper_left.png');
 }
@@ -130,7 +129,7 @@ header.hud {
   opacity: 0;
 }
 
-/* INDICADOR DE ALVO (opcional) */
+/* INDICADOR DE ALVO */
 #targetIndicator {
   position: absolute;
   width: 24px;
@@ -148,7 +147,7 @@ header.hud {
   transform: scale(1.1);
 }
 
-/* CÍRCULOS DOS LOCAIS DE CHUTE */
+/* CÍRCULOS DAS ZONAS DE CHUTE */
 .shot-spot {
   position: absolute;
   width: 18px;
@@ -160,6 +159,15 @@ header.hud {
   opacity: 0.85;
   pointer-events: none;
   z-index: 15;
+}
+
+/* RETÂNGULO DA ÁREA DE CHUTE – APENAS BORDA, SEM FUNDO */
+.shot-area {
+  position: absolute;
+  border: 2px dashed rgba(148, 163, 184, 0.9);
+  background: transparent;        /* sem fundo branco */
+  z-index: 4;                     /* abaixo de trave, goleiro e círculos */
+  pointer-events: none;
 }
 
 /* RODAPÉ */
@@ -220,4 +228,3 @@ footer {
     width: min(20vw, 180px);
   }
 }
-
