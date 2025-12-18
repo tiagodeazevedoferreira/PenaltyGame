@@ -6,24 +6,15 @@
 
 /* FUNDO COM ESTÁDIO */
 body {
-  background: #111;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f172a;
+  color: white;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  color: #f9fafb;
-  font-family: system-ui, -apple-system, sans-serif;
-
-  background-image: url('stadium.jpg'); /* ajuste para 'stadium.jpg' se não usar pasta img */
+  background-image: url('stadium.jpg');
   background-size: cover;
   background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* HUD no topo */
-header.hud {
-  padding: 0.4rem 0.8rem;
-  font-size: 0.9rem;
-  background: rgba(0, 0, 0, 0.8);
 }
 
 /* CONTAINER PRINCIPAL */
@@ -33,51 +24,104 @@ header.hud {
   flex-direction: column;
 }
 
+/* HUD RESPONSIVA */
+header.hud {
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.score {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.countdown {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: #f59e0b;
+  min-width: 48px;
+  text-align: center;
+}
+
+#status {
+  flex: 1;
+}
+
 /* ÁREA DO JOGO */
 #gameArea {
   flex: 1;
   position: relative;
-  background: rgba(0, 0, 0, 0.35); /* leve escurecida sobre o estádio */
-  width: 100%;
+  cursor: pointer;
+  touch-action: manipulation;
+  background: radial-gradient(circle at top, rgba(15,23,42,0.6), rgba(15,23,42,0.95));
+  overflow: hidden;
 }
 
-/* TRAVE CENTRALIZADA */
+/* TRAVE CENTRALIZADA – ADAPTA A VERTICAL/HORIZONTAL */
 #goalZone {
   position: absolute;
   left: 50%;
   top: 55%;
   transform: translate(-50%, -50%);
-  width: 80vw;
-  max-width: 900px;
+  width: min(90vw, 700px);
   height: auto;
-  aspect-ratio: 455 / 185;   /* proporção aproximada da imagem da trave */
-  background-image: url('goal.png');  /* ajuste caminho se necessário */
+  aspect-ratio: 455 / 185;
+  background-image: url('goal.png');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
 }
 
-/* GOLEIRO CENTRALIZADO */
+/* GOLEIRO BASE (posição neutra) */
 #goalkeeper {
   position: absolute;
   left: 50%;
   top: 55%;
   transform: translate(-50%, -50%);
-  width: 28vw;
-  max-width: 360px;
+  width: min(28vw, 220px);
   height: auto;
   aspect-ratio: 768 / 786;
-  background-image: url('goalkeeper.png'); /* ajuste caminho se necessário */
   background-size: contain;
   background-repeat: no-repeat;
   background-position: bottom;
+  z-index: 10;
+  transition: transform 0.2s ease-out;
 }
 
-/* BOLA (ainda não usada visualmente) */
+/* SPRITES DO GOLEIRO POR DIREÇÃO/ALTURA */
+.goalkeeper-left {
+  background-image: url('goalkeeper_left.png');
+}
+
+.goalkeeper-right {
+  background-image: url('goalkeeper_right.png');
+}
+
+.goalkeeper-high {
+  background-image: url('goalkeeper_high.png');
+}
+
+.goalkeeper-center {
+  background-image: url('goalkeeper_center.png');
+}
+
+.goalkeeper-down {
+  background-image: url('goalkeeper_down.png');
+}
+
+/* BOLA */
 #ball {
   position: absolute;
-  width: 45px;
-  height: 45px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, #fff 0%, #f8fafc 30%, #f1f5f9 60%, #e2e8f0 100%);
   box-shadow:
@@ -85,66 +129,54 @@ header.hud {
     inset 0 4px 12px rgba(255,255,255,0.6),
     inset 0 -2px 8px rgba(0,0,0,0.3);
   border: 3px solid #1e293b;
-  transition: all 0.3s ease-out;
-  z-index: 30;
+  z-index: 20;
   opacity: 0;
-  transform: translateY(100px);
 }
 
-#ball.flying {
-  animation: ballFlight 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-@keyframes ballFlight {
-  0% {
-    transform: translateY(100px) scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: translateY(-300px) rotate(720deg) scale(0.7);
-    opacity: 0.8;
-  }
-}
-
-/* INDICADOR DE ALVO */
+/* INDICADOR DE ALVO (opcional) */
 #targetIndicator {
   position: absolute;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   background: radial-gradient(circle, rgba(59,130,246,0.9) 0%, rgba(59,130,246,0.3) 70%);
   border-radius: 50%;
-  border: 3px solid rgba(255,255,255,0.8);
+  border: 2px solid rgba(255,255,255,0.8);
   opacity: 0;
-  z-index: 25;
-  transition: all 0.2s ease;
+  z-index: 18;
+  transition: all 0.15s ease;
 }
 
 #targetIndicator.active {
   opacity: 1;
   transform: scale(1.1);
-  animation: pulse 0.6s infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.3); }
+/* CÍRCULOS DOS LOCAIS DE CHUTE */
+.shot-spot {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.9);
+  background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(251,191,36,0.3) 70%);
+  box-shadow: 0 0 8px rgba(251,191,36,0.8);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 15;
 }
 
 /* RODAPÉ */
 footer {
   padding: 0.4rem;
   text-align: center;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(15, 23, 42, 0.92);
 }
 
 #restartBtn {
   background: linear-gradient(45deg, #3b82f6, #1d4ed8);
   color: white;
   border: none;
-  padding: 0.5rem 1.5rem;
+  padding: 0.45rem 1.5rem;
   border-radius: 999px;
   font-weight: 600;
   cursor: pointer;
@@ -154,18 +186,40 @@ footer {
   opacity: 0.9;
 }
 
-/* RESPONSIVO */
+/* MOBILE VERTICAL */
 @media (max-width: 768px) {
+  header.hud {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.5rem;
+  }
+
+  .countdown {
+    font-size: 1.4rem;
+  }
+
   #goalZone {
-    width: 90vw;
+    top: 58%;
+    width: 94vw;
   }
 
   #goalkeeper {
-    width: 40vw;
+    width: 38vw;
+  }
+}
+
+/* PAISAGEM EM TELAS BAIXAS */
+@media (max-height: 500px) {
+  header.hud {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.5rem;
   }
 
-  header.hud {
-    font-size: 0.8rem;
-    padding: 0.3rem 0.6rem;
+  #goalZone {
+    top: 60%;
+    width: min(70vw, 600px);
+  }
+
+  #goalkeeper {
+    width: min(20vw, 180px);
   }
 }

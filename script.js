@@ -1,5 +1,4 @@
 class PenaltyGame {
-
   constructor() {
     this.gameArea = document.getElementById('gameArea');
     this.goalZone = document.getElementById('goalZone');
@@ -13,7 +12,7 @@ class PenaltyGame {
     this.attemptsEl = document.getElementById('attempts');
     this.restartBtn = document.getElementById('restartBtn');
 
-    // Configurações do jogo
+    // 11 zonas de chute
     this.zones = [
       {x: 0.1, y: 0.1, name: 'Canto Sup Esq'},    // 0
       {x: 0.3, y: 0.1, name: 'Esq Superior'},     // 1
@@ -28,29 +27,41 @@ class PenaltyGame {
       {x: 0.9, y: 0.7, name: 'Dir Inferior'}      // 10
     ];
 
+    // mapeamento zona -> sprite do goleiro
+    this.zoneToGoalkeeperSprite = [
+      'left',   // 0 Canto sup esq
+      'left',   // 1 Esq superior
+      'high',   // 2 Centro superior
+      'right',  // 3 Dir superior
+      'right',  // 4 Canto sup dir
+      'left',   // 5 Esq média
+      'center', // 6 Centro médio
+      'right',  // 7 Dir média
+      'left',   // 8 Esq inferior
+      'down',   // 9 Chão centro
+      'right'   // 10 Dir inferior
+    ];
+
+    this.shotSpots = [];
+
     this.gameState = {
       playerScore: 0,
       goalieScore: 0,
       currentAttempt: 1,
       totalAttempts: 5,
       countdown: 3,
-      isAiming: false,
-      aimStartTime: 0,
-      aimStartPos: {x: 0, y: 0},
-      targetZone: null,
-      difficulty: 0.3, // 30% chance goleiro acertar no início
+      targetZoneIndex: null,
+      difficulty: 0.3,
       isPlaying: false
     };
 
+    this.createShotSpots();
     this.init();
   }
 
   init() {
-    this.gameArea.addEventListener('pointerdown', (e) => this.startAim(e));
-    this.gameArea.addEventListener('pointermove', (e) => this.updateAim(e));
-    this.gameArea.addEventListener('pointerup', () => this.shoot());
+    this.gameArea.addEventListener('pointerdown', (e) => this.onShootClick(e));
     this.restartBtn.addEventListener('click', () => this.restart());
-
     this.startNewAttempt();
   }
 
@@ -64,7 +75,7 @@ class PenaltyGame {
       if (this.gameState.countdown > 0) {
         this.countdownEl.textContent = this.gameState.countdown;
         this.countdownEl.style.transform = 'scale(1.2)';
-        setTimeout(() => this.countdownEl.style.transform = 'scale(1)', 150);
+        setTimeout(() => (this.countdownEl.style.transform = 'scale(1)'), 150);
       } else {
         clearInterval(countdown);
         this.countdownEl.textContent = 'VAI!';
@@ -72,125 +83,127 @@ class PenaltyGame {
 
         setTimeout(() => {
           this.countdownEl.style.display = 'none';
-          this.statusEl.textContent = 'Toque e arraste para mirar!';
+          this.statusEl.textContent = 'Toque no gol para chutar!';
         }, 800);
       }
     }, 1000);
   }
 
-  startAim(e) {
-    if (!this.gameState.isPlaying || this.gameState.isAiming) return;
+  // clique/touch único define a direção
+  onShootClick(e) {
+    if (!this.gameState.isPlaying) return;
 
     const rect = this.gameArea.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
-    // Verifica se está na zona do gol
-    if (x >= 0.05 && x <= 0.95 && y >= 0.05 && y <= 0.45) {
-      this.gameState.isAiming = true;
-      this.gameState.aimStartTime = Date.now();
-      this.gameState.aimStartPos = {x, y};
+    // Aceita apenas cliques na região do gol
+    if (x < 0.05 || x > 0.95 || y < 0.05 || y > 0.45) return;
 
-      // Encontra zona mais próxima
-      this.gameState.targetZone = this.zones.reduce((closest, zone) => {
+    // zona mais próxima
+    const closest = this.zones.reduce(
+      (acc, zone, idx) => {
         const dist = Math.hypot(x - zone.x, y - zone.y);
-        return dist < closest.dist ? {zone, dist} : closest;
-      }, {zone: null, dist: Infinity}).zone;
+        return dist < acc.dist ? {idx, zone, dist} : acc;
+      },
+      {idx: null, zone: null, dist: Infinity}
+    );
 
-      this.updateTargetIndicator();
-      this.statusEl.textContent = 'Arraste para ajustar força...';
-    }
-  }
-
-  updateAim(e) {
-    if (!this.gameState.isAiming) return;
-
-    const rect = this.gameArea.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-
-    // Atualiza zona alvo
-    this.gameState.targetZone = this.zones.reduce((closest, zone) => {
-      const dist = Math.hypot(x - zone.x, y - zone.y);
-      return dist < closest.dist ? {zone, dist} : closest;
-    }, {zone: null, dist: Infinity}).zone;
-
-    this.updateTargetIndicator();
-  }
-
-  updateTargetIndicator() {
-    if (!this.gameState.targetZone) return;
-
-    const rect = this.goalZone.getBoundingClientRect();
-    const gameRect = this.gameArea.getBoundingClientRect();
-
-    const left = gameRect.left + this.gameState.targetZone.x * rect.width + rect.left - gameRect.left;
-    const top = gameRect.top + this.gameState.targetZone.y * rect.height + rect.top - gameRect.top;
-
-    this.targetIndicator.style.left = `${left}px`;
-    this.targetIndicator.style.top = `${top}px`;
-    this.targetIndicator.classList.add('active');
-  }
-
-  shoot() {
-    if (!this.gameState.isAiming || !this.gameState.targetZone) return;
-
-    this.gameState.isAiming = false;
-    this.targetIndicator.classList.remove('active');
-
-    const holdTime = (Date.now() - this.gameState.aimStartTime) / 1000;
-    const power = Math.min(holdTime / 2, 1.5); // Máx 1.5s = força máxima
+    this.gameState.targetZoneIndex = closest.idx;
 
     this.statusEl.textContent = 'CHUTE!';
-
-    // Anima bola
-    this.ball.style.left = '50%';
-    this.ball.style.opacity = '1';
-    this.ball.classList.add('flying');
-
-    // Goleiro reage após 300ms
-    setTimeout(() => this.goalieReaction(power), 300);
-
     this.gameState.isPlaying = false;
+
+    const goalRect = this.goalZone.getBoundingClientRect();
+    const targetZone = closest.zone;
+    const targetPxX = goalRect.left + targetZone.x * goalRect.width;
+    const targetPxY = goalRect.top + targetZone.y * goalRect.height;
+
+    // indicador de alvo
+    this.targetIndicator.style.left = `${targetPxX - rect.left - 12}px`;
+    this.targetIndicator.style.top = `${targetPxY - rect.top - 12}px`;
+    this.targetIndicator.classList.add('active');
+
+    // bola parte do centro inferior da área
+    const startX = rect.width / 2;
+    const startY = rect.height;
+
+    this.ball.style.opacity = '1';
+    this.ball.style.left = `${startX - 20}px`;
+    this.ball.style.top = `${startY - 60}px`;
+
+    const deltaX = targetPxX - (rect.left + startX);
+    const deltaY = targetPxY - (rect.top + startY);
+
+    this.ball.animate(
+      [
+        { transform: 'translate(0, 0)', offset: 0 },
+        { transform: `translate(${deltaX}px, ${deltaY}px)`, offset: 1 }
+      ],
+      { duration: 500, easing: 'cubic-bezier(0.25,0.46,0.45,0.94)' }
+    );
+
+    setTimeout(() => this.goalieReaction(), 200);
   }
 
-  goalieReaction(power) {
-    // Dificuldade gradativa (não usamos diretamente aqui, mas pode entrar na escolha futura)
-    const goalieAccuracy = this.gameState.difficulty + (this.gameState.currentAttempt - 1) * 0.08;
+  // goleiro escolhe movimento com base na zona de chute
+  goalieReaction() {
+    const idx = this.gameState.targetZoneIndex;
+    if (idx == null) return;
 
-    // Direções possíveis: esquerda, centro, direita
-    const goaliePositions = ['left', 'center', 'right'];
-    const goalieChoice = goaliePositions[Math.floor(Math.random() * goaliePositions.length)];
+    const spriteKey = this.zoneToGoalkeeperSprite[idx];
 
-    // Limpa classes antigas
-    this.goalkeeper.classList.remove('goalkeeper-left', 'goalkeeper-center', 'goalkeeper-right');
+    // limpa classes anteriores
+    this.goalkeeper.classList.remove(
+      'goalkeeper-left',
+      'goalkeeper-right',
+      'goalkeeper-high',
+      'goalkeeper-center',
+      'goalkeeper-down'
+    );
 
-    // Aplica sprite e deslocamento conforme direção
-    if (goalieChoice === 'left') {
+    // aplica sprite e deslocamento conforme direção/altura
+    let translateX = -50;
+    let translateY = -50;
+
+    if (spriteKey === 'left') {
       this.goalkeeper.classList.add('goalkeeper-left');
-      this.goalkeeper.style.transform = 'translate(-80%, -50%)'; // pulo à esquerda
-    } else if (goalieChoice === 'right') {
+      translateX = -75;
+    } else if (spriteKey === 'right') {
       this.goalkeeper.classList.add('goalkeeper-right');
-      this.goalkeeper.style.transform = 'translate(-20%, -50%)'; // pulo à direita
+      translateX = -25;
+    } else if (spriteKey === 'high') {
+      this.goalkeeper.classList.add('goalkeeper-high');
+      translateY = -65;
+    } else if (spriteKey === 'down') {
+      this.goalkeeper.classList.add('goalkeeper-down');
+      translateY = -40;
     } else {
       this.goalkeeper.classList.add('goalkeeper-center');
-      this.goalkeeper.style.transform = 'translate(-50%, -50%) translateY(-10px)'; // leve salto no centro
     }
 
+    this.goalkeeper.style.transform = `translate(${translateX}%, ${translateY}%)`;
+
     setTimeout(() => {
-      this.checkGoal(goalieChoice, power);
-    }, 500);
+      this.checkGoal(spriteKey);
+    }, 400);
   }
 
-  checkGoal(goalieChoice, power) {
-    const targetX = this.gameState.targetZone.x;
+  checkGoal(spriteKey) {
+    const idx = this.gameState.targetZoneIndex;
+    const targetZone = this.zones[idx];
 
-    // Mapeia posições do goleiro para zonas horizontais
-    const goalieZone = {left: 0.25, center: 0.5, right: 0.75}[goalieChoice];
+    // posição horizontal do chute (0 esquerda, 1 direita)
+    const targetX = targetZone.x;
 
-    // Gol se: distância > precisão goleiro OU força alta
-    const distance = Math.abs(targetX - goalieZone);
-    const successChance = distance > 0.25 || power > 1.2;
+    // posição efetiva do goleiro conforme sprite
+    let goalieX;
+    if (spriteKey === 'left') goalieX = 0.25;
+    else if (spriteKey === 'right') goalieX = 0.75;
+    else goalieX = 0.5; // high, center, down
+
+    const distance = Math.abs(targetX - goalieX);
+    const successChance = distance > 0.2; // margem pequena
 
     if (successChance && Math.random() > this.gameState.difficulty) {
       this.gameState.playerScore++;
@@ -209,7 +222,7 @@ class PenaltyGame {
 
   nextAttempt() {
     if (this.gameState.currentAttempt < this.gameState.totalAttempts) {
-      setTimeout(() => this.startNewAttempt(), 2000);
+      setTimeout(() => this.startNewAttempt(), 1500);
     } else {
       this.endGame();
     }
@@ -218,17 +231,22 @@ class PenaltyGame {
   startNewAttempt() {
     this.gameState.currentAttempt++;
     this.gameState.countdown = 3;
-    this.gameState.targetZone = null;
+    this.gameState.targetZoneIndex = null;
 
-    // Reset posições
     this.ball.style.opacity = '0';
-    this.ball.classList.remove('flying');
+    this.targetIndicator.classList.remove('active');
 
-    this.goalkeeper.classList.remove('goalkeeper-left', 'goalkeeper-center', 'goalkeeper-right');
+    // volta goleiro para sprite central neutro
+    this.goalkeeper.classList.remove(
+      'goalkeeper-left',
+      'goalkeeper-right',
+      'goalkeeper-high',
+      'goalkeeper-center',
+      'goalkeeper-down'
+    );
     this.goalkeeper.classList.add('goalkeeper-center');
     this.goalkeeper.style.transform = 'translate(-50%, -50%)';
 
-    this.targetIndicator.classList.remove('active');
     this.attemptsEl.textContent = this.gameState.currentAttempt;
     this.statusEl.textContent = 'Preparado...';
     this.statusEl.style.color = 'white';
@@ -253,10 +271,7 @@ class PenaltyGame {
       currentAttempt: 0,
       totalAttempts: 5,
       countdown: 3,
-      isAiming: false,
-      aimStartTime: 0,
-      aimStartPos: {x: 0, y: 0},
-      targetZone: null,
+      targetZoneIndex: null,
       difficulty: 0.3,
       isPlaying: false
     };
@@ -269,13 +284,38 @@ class PenaltyGame {
 
     this.startNewAttempt();
   }
+
+  createShotSpots() {
+    const placeSpots = () => {
+      this.shotSpots.forEach((el) => el.remove());
+      this.shotSpots = [];
+
+      const goalRect = this.goalZone.getBoundingClientRect();
+      const gameRect = this.gameArea.getBoundingClientRect();
+
+      this.zones.forEach((zone) => {
+        const spot = document.createElement('div');
+        spot.className = 'shot-spot';
+
+        const x = gameRect.left + zone.x * goalRect.width + goalRect.left - gameRect.left;
+        const y = gameRect.top + zone.y * goalRect.height + goalRect.top - gameRect.top;
+
+        spot.style.left = `${x - 9}px`;
+        spot.style.top = `${y - 9}px`;
+
+        this.gameArea.appendChild(spot);
+        this.shotSpots.push(spot);
+      });
+    };
+
+    setTimeout(placeSpots, 50);
+    window.addEventListener('resize', () => setTimeout(placeSpots, 50));
+  }
 }
 
-// Inicializa jogo quando DOM carregar
 window.addEventListener('load', () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
   }
-
   new PenaltyGame();
 });
