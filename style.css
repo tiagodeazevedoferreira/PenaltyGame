@@ -147,26 +147,21 @@ header.hud {
   transform: scale(1.1);
 }
 
-/* CÍRCULOS DAS ZONAS DE CHUTE */
-.shot-spot {
+/* OVERLAYS DAS ZONAS DE DEFESA */
+.zone-overlay {
   position: absolute;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.9);
-  background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(251,191,36,0.3) 70%);
-  box-shadow: 0 0 8px rgba(251,191,36,0.8);
-  opacity: 0.85;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  border-radius: 4px;
   pointer-events: none;
-  z-index: 15;
+  z-index: 6; /* acima do gol, abaixo do goleiro e bola */
 }
 
-/* RETÂNGULO DA ÁREA DE CHUTE – APENAS BORDA, SEM FUNDO */
+/* RETÂNGULO DA ÁREA DE CHUTE (opcional, pode remover se não usar) */
 .shot-area {
   position: absolute;
   border: 2px dashed rgba(148, 163, 184, 0.9);
-  background: transparent;        /* sem fundo branco */
-  z-index: 4;                     /* abaixo de trave, goleiro e círculos */
+  background: transparent; /* sem fundo branco */
+  z-index: 4; /* abaixo de trave, goleiro e zonas */
   pointer-events: none;
 }
 
