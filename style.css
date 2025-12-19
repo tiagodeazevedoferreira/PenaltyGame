@@ -51,24 +51,25 @@ header.hud {
   flex: 1;
 }
 
-/* ÁREA DO JOGO – altura fixa relativa à viewport, sem bloco verde cheio */
+/* ÁREA DO JOGO – só a trave/goleiro, sem bloco verde cheio */
 #gameArea {
   position: relative;
   cursor: pointer;
   touch-action: manipulation;
-  background: transparent;   /* some com o verde escuro */
+  background: transparent;
   overflow: hidden;
 
-  height: 90vh;              /* trave ocupa ~90% da tela abaixo do HUD */
+  height: 90vh;                 /* ocupa ~90% da viewport abaixo do HUD */
   display: flex;
-  align-items: center;       /* centraliza horizontalmente */
-  justify-content: center;   /* centraliza verticalmente */
+  align-items: center;          /* centraliza horizontalmente */
+  justify-content: center;      /* centraliza verticalmente */
 }
 
-/* TRAVE – centralizada e responsiva */
+/* TRAVE centralizada e responsiva */
 #goalZone {
-  position: relative;
-  width: 90vw;               /* quase toda a largura */
+  position: relative;           /* referência para o goleiro */
+  width: 90vw;                  /* quase toda a largura */
+  max-width: 700px;             /* limite em desktop */
   height: auto;
   aspect-ratio: 455 / 185;
   background-image: url('goal.png');
@@ -77,13 +78,13 @@ header.hud {
   background-position: center;
 }
 
-/* GOLEIRO – centralizado em relação à trave */
+/* GOLEIRO responsivo em relação à trave */
 #goalkeeper {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 55%;                     /* ligeiramente abaixo do centro vertical */
   transform: translate(-50%, -50%);
-  width: min(40vw, 320px);
+  width: 35%;                   /* sempre ~35% da largura da trave */
   height: auto;
   aspect-ratio: 768 / 786;
   background-size: contain;
@@ -92,7 +93,6 @@ header.hud {
   z-index: 10;
   transition: transform 0.2s ease-out;
 }
-
 
 /* SPRITES DO GOLEIRO */
 .goalkeeper-left {
@@ -158,12 +158,12 @@ header.hud {
   z-index: 6; /* acima do gol, abaixo do goleiro e bola */
 }
 
-/* RETÂNGULO DA ÁREA DE CHUTE (opcional, pode remover se não usar) */
+/* RETÂNGULO DA ÁREA DE CHUTE (opcional) */
 .shot-area {
   position: absolute;
   border: 2px dashed rgba(148, 163, 184, 0.9);
-  background: transparent; /* sem fundo branco */
-  z-index: 4; /* abaixo de trave, goleiro e zonas */
+  background: transparent;
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -200,12 +200,11 @@ footer {
   }
 
   #goalZone {
-    top: 58%;
-    width: 94vw;
+    width: 94vw;              /* um pouco maior em celulares */
   }
 
   #goalkeeper {
-    width: 38vw;
+    width: 45%;               /* goleiro ocupa mais da trave em telas pequenas */
   }
 }
 
@@ -217,11 +216,10 @@ footer {
   }
 
   #goalZone {
-    top: 60%;
     width: min(70vw, 600px);
   }
 
   #goalkeeper {
-    width: min(20vw, 180px);
+    width: 35%;
   }
 }
