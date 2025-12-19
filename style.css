@@ -51,23 +51,24 @@ header.hud {
   flex: 1;
 }
 
-/* ÁREA DO JOGO */
+/* ÁREA DO JOGO – tamanho do conteúdo (trave) */
 #gameArea {
-  flex: 1;
   position: relative;
   cursor: pointer;
   touch-action: manipulation;
-  background: radial-gradient(circle at top, #020617, #020617 40%, #020617 100%);
+  background: transparent;
   overflow: hidden;
+
+  display: flex;
+  flex-direction: column;      /* empilha trave e goleiro verticalmente */
+  align-items: center;         /* centraliza tudo na horizontal */
+  justify-content: center;     /* centraliza no espaço vertical disponível */
 }
 
-/* TRAVE */
+/* TRAVE centralizada */
 #goalZone {
-  position: absolute;
-  left: 50%;
-  top: 55%;
-  transform: translate(-50%, -50%);
-  width: min(90vw, 700px);
+  position: relative;
+  width: 80vw;                 /* controla o tamanho do conjunto */
   height: auto;
   aspect-ratio: 455 / 185;
   background-image: url('goal.png');
@@ -76,13 +77,13 @@ header.hud {
   background-position: center;
 }
 
-/* GOLEIRO */
+/* GOLEIRO centralizado sobre a trave */
 #goalkeeper {
   position: absolute;
   left: 50%;
-  top: 55%;
+  top: 50%;                    /* centro da trave */
   transform: translate(-50%, -50%);
-  width: min(28vw, 220px);
+  width: min(40vw, 420px);
   height: auto;
   aspect-ratio: 768 / 786;
   background-size: contain;
@@ -91,6 +92,8 @@ header.hud {
   z-index: 10;
   transition: transform 0.2s ease-out;
 }
+
+
 
 /* SPRITES DO GOLEIRO */
 .goalkeeper-left {

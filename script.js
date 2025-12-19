@@ -135,6 +135,7 @@ class PenaltyGame {
     );
   }
 
+  // converte (x,y) normalizado em zona 1..15
   getZoneFromCoords(x, y) {
     let col = Math.floor(x / this.colWidth);
     let row = Math.floor(y / this.rowHeight);
@@ -142,14 +143,14 @@ class PenaltyGame {
     if (col > this.gridCols - 1) col = this.gridCols - 1;
     if (row < 0) row = 0;
     if (row > this.gridRows - 1) row = this.gridRows - 1;
-    return row * this.gridCols + col + 1; // 1..15
+    return row * this.gridCols + col + 1;
   }
 
   goalieReaction() {
-    // prioridades
-    const priority1 = [6, 1, 10, 15];
-    const priority2 = [7, 12, 9, 14];
-    const priority3 = [1, 2, 4, 5];
+    // --- prioridades com novos pesos ---
+    const priority1 = [6, 11, 10, 15];  // peso 4
+    const priority2 = [1, 5];           // peso 3
+    const priority3 = [3, 13];          // peso 2
     const allZones = Array.from({ length: 15 }, (_, i) => i + 1);
 
     const p1 = new Set(priority1);
@@ -157,6 +158,7 @@ class PenaltyGame {
     const p3 = new Set(priority3);
 
     const priority4 = allZones.filter((z) => !p1.has(z) && !p2.has(z) && !p3.has(z));
+    // priority4 inclui zona 8 e as que não foram citadas
 
     const weighted = [];
     const pushWithWeight = (arr, w) => {
@@ -182,7 +184,7 @@ class PenaltyGame {
       'goalkeeper-down'
     );
 
-    // sprites por zona
+    // sprites por zona (como definido antes)
     const spriteMap = {
       1: 'goalkeeper-left',
       2: 'goalkeeper-left',
@@ -210,17 +212,16 @@ class PenaltyGame {
     const row = Math.floor(index / this.gridCols);
     const col = index % this.gridCols;
 
-    // altura básica por linha
+    // altura básica
     if (row === 0) translateY = -68;
     else if (row === 2) translateY = -40;
 
-    // zonas de borda: mão sobrepondo a trave
+    // bordas: mão sobrepondo trave
     if (randomZone === 1 || randomZone === 6 || randomZone === 11) {
-      translateX = -110; // mais para fora da esquerda
+      translateX = -150;
     } else if (randomZone === 5 || randomZone === 10 || randomZone === 15) {
-      translateX = 10;   // mais para fora da direita
+      translateX = 50;
     } else {
-      // zonas internas com leve ajuste
       if (col === 0) translateX = -80;
       else if (col === 1) translateX = -65;
       else if (col === 2) translateX = -50;
@@ -234,6 +235,7 @@ class PenaltyGame {
     setTimeout(() => this.checkGoal(), 400);
   }
 
+  // retângulo base da zona 1..15
   getZoneRect(zone) {
     const index = zone - 1;
     const row = Math.floor(index / this.gridCols);
@@ -245,11 +247,29 @@ class PenaltyGame {
     return { minX, maxX, minY, maxY };
   }
 
+  // zonas defensivas e cobertura extra
+  // defesa "principal": 1,3,5,6,8,10,11,13,15
+  // coberturas extras:
+  // 1 cobre 1 e 2; 5 cobre 5 e 4; 6 cobre 6 e 7; 10 cobre 10 e 9;
+  // 11 cobre 11 e 12; 15 cobre 15 e 14.
+  getDefendedZonesForGoalieZone(zone) {
+    switch (zone) {
+      case 1:  return [1, 2];
+      case 5:  return [5, 4];
+      case 6:  return [6, 7];
+      case 10: return [10, 9];
+      case 11: return [11, 12];
+      case 15: return [15, 14];
+      default:
+        return [zone];
+    }
+  }
+
   getInflatedGoalieRect(zone) {
     const base = this.getZoneRect(zone);
     let grow = this.getCurrentGrowFactor();
 
-    // bordas ganham mais alcance lógico
+    // bordas seguem com alcance lógico maior
     const borderZones = new Set([1, 6, 11, 5, 10, 15]);
     if (borderZones.has(zone)) {
       grow *= 1.2;
@@ -281,6 +301,20 @@ class PenaltyGame {
       return;
     }
 
+    // zonas efetivamente defendidas por causa da cobertura
+    const defendedZones = this.getDefendedZonesForGoalieZone(goalieZone);
+
+    // se a zona do chute não estiver em nenhuma zona defendida, é gol direto
+    if (!defendedZones.includes(shotZone)) {
+      this.gameState.playerScore++;
+      this.playerScoreEl.textContent = this.gameState.playerScore;
+      this.statusEl.textContent = 'GOL!';
+      this.statusEl.style.color = '#10b981';
+      this.nextAttempt();
+      return;
+    }
+
+    // se está em zona coberta, ainda passamos pela área (inflada) da zona principal
     const rect = this.getInflatedGoalieRect(goalieZone);
     const defended =
       shotX >= rect.minX &&
