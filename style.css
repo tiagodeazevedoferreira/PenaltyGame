@@ -51,31 +51,30 @@ header.hud {
   flex: 1;
 }
 
-/* ÁREA DO JOGO – ocupa toda a altura entre HUD e barra do navegador */
+/* ÁREA DO JOGO – altura fixa relativa à viewport, sem bloco verde cheio */
 #gameArea {
-  flex: 1;
   position: relative;
   cursor: pointer;
   touch-action: manipulation;
-  background: #020617;
+  background: transparent;   /* some com o verde escuro */
   overflow: hidden;
 
+  height: 90vh;              /* trave ocupa ~90% da tela abaixo do HUD */
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;      /* centraliza trave+goleiro verticalmente */
+  align-items: center;       /* centraliza horizontalmente */
+  justify-content: center;   /* centraliza verticalmente */
 }
 
-/* TRAVE – controla tamanho máximo e garante que a base apareça */
+/* TRAVE – centralizada e responsiva */
 #goalZone {
   position: relative;
-  width: 100vw;
-  max-width: 600px;             /* limite em celulares estreitos */
+  width: 90vw;               /* quase toda a largura */
+  height: auto;
   aspect-ratio: 455 / 185;
   background-image: url('goal.png');
   background-size: contain;
   background-repeat: no-repeat;
-  background-position: center bottom; /* encosta a base dentro do rect */
+  background-position: center;
 }
 
 /* GOLEIRO – centralizado em relação à trave */
