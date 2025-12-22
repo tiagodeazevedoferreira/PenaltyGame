@@ -1,11 +1,11 @@
 class PenaltyGame {
-
   constructor() {
     this.gameArea = document.getElementById('gameArea');
     this.goalZone = document.getElementById('goalZone');
     this.goalkeeper = document.getElementById('goalkeeper');
     this.ball = document.getElementById('ball');
     this.targetIndicator = document.getElementById('targetIndicator');
+    this.dragIndicator = document.getElementById('dragIndicator');
 
     this.playerScoreEl = document.getElementById('playerScore');
     this.goalieScoreEl = document.getElementById('goalieScore');
@@ -17,10 +17,9 @@ class PenaltyGame {
     this.shotHistoryEl = document.getElementById('shotHistory');
     this.seriesWonEl = document.getElementById('seriesWon');
     this.bestStreakEl = document.getElementById('bestStreak');
-
     this.difficultySelect = document.getElementById('difficultySelect');
 
-    // grade 3x5 (15 zonas)
+    // grade 3x5 (15 zonas) - só para IA
     this.gridCols = 5;
     this.gridRows = 3;
     this.colWidth = 1 / this.gridCols;
@@ -35,16 +34,18 @@ class PenaltyGame {
       isPlaying: false,
       shotX: null,
       shotY: null,
-      shotZone: null,   // 1..15
-      goalieZone: null, // 1..15
-      shotsHistory: [],  // últimas direções: E/C/D
-      currentStreak: 0,  // gols seguidos na série atual
-      seriesWon: 0,      // séries vencidas acumuladas
-      bestStreak: 0,     // recorde global (localStorage)
-      pressStartTime: null,
-      lastPointerY: null,
-      powerFactor: 1,
-      curveOffsetY: 0
+      shotZone: null,
+      goalieZone: null,
+      shotsHistory: [],
+      currentStreak: 0,
+      seriesWon: 0,
+      bestStreak: 0,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragStartTime: 0,
+      dragCurrentX: 0,
+      dragCurrentY: 0,
+      powerFactor: 1
     };
 
     this.aiConfig = {
@@ -55,20 +56,37 @@ class PenaltyGame {
       historyWindow: 10
     };
 
-    this.zoneOverlays = [];
     this.canVibrate = 'vibrate' in navigator;
 
     this.loadStatsFromStorage();
     this.init();
     this.updateStatsHUD();
-    // this.createZoneOverlays(); // overlays desativados
   }
 
   init() {
-    this.gameArea.addEventListener('pointerdown', (e) => this.onPointerDown(e));
-    this.gameArea.addEventListener('pointermove', (e) => this.onPointerMove(e));
-    this.gameArea.addEventListener('pointerup',   (e) => this.onPointerUp(e));
-    this.gameArea.addEventListener('pointercancel', (e) => this.onPointerUp(e));
+    // EVENTOS DE ARRASTO COM preventDefault para desktop/mobile
+    const preventDefault = (e) => e.preventDefault();
+
+    this.gameArea.addEventListener('pointerdown', (e) => {
+      preventDefault(e);
+      this.onDragStart(e);
+    });
+    this.gameArea.addEventListener('pointermove', (e) => {
+      preventDefault(e);
+      this.onDragMove(e);
+    });
+    this.gameArea.addEventListener('pointerup', (e) => {
+      preventDefault(e);
+      this.onDragEnd(e);
+    });
+    this.gameArea.addEventListener('pointercancel', (e) => {
+      preventDefault(e);
+      this.onDragEnd(e);
+    });
+
+    // bloqueia scroll durante arrasto em mobile
+    document.addEventListener('touchmove', preventDefault, { passive: false });
+    document.addEventListener('touchstart', preventDefault, { passive: false });
 
     this.restartBtn.addEventListener('click', () => this.restart());
 
@@ -163,103 +181,164 @@ class PenaltyGame {
 
         setTimeout(() => {
           this.countdownEl.style.display = 'none';
-          this.statusEl.textContent = 'Toque e arraste para chutar.';
+          this.statusEl.textContent = 'Arraste para chutar!';
         }, 800);
       }
     }, 1000);
   }
 
-  // CONTROLES DE CHUTE (pressão e arrasto)
-  onPointerDown(e) {
+  // ===== CONTROLES POR ARRASTO =====
+  onDragStart(e) {
     if (!this.gameState.isPlaying) return;
 
-    this.gameState.pressStartTime = performance.now();
-    this.gameState.lastPointerY = e.clientY;
-    this.gameState.curveOffsetY = 0;
+    const rect = this.gameArea.getBoundingClientRect();
+    this.gameState.dragStartX = e.clientX - rect.left;
+    this.gameState.dragStartY = e.clientY - rect.top;
+    this.gameState.dragStartTime = performance.now();
+    this.gameState.dragCurrentX = this.gameState.dragStartX;
+    this.gameState.dragCurrentY = this.gameState.dragStartY;
+
+    this.showDragIndicator();
   }
 
-  onPointerMove(e) {
-    if (!this.gameState.isPlaying || this.gameState.pressStartTime == null) return;
+  onDragMove(e) {
+    if (!this.gameState.isPlaying || this.gameState.dragStartTime === 0) return;
 
-    const gameRect = this.gameArea.getBoundingClientRect();
-    const deltaY = e.clientY - this.gameState.lastPointerY;
+    const rect = this.gameArea.getBoundingClientRect();
+    this.gameState.dragCurrentX = e.clientX - rect.left;
+    this.gameState.dragCurrentY = e.clientY - rect.top;
 
-    const norm = deltaY / gameRect.height;
-    this.gameState.curveOffsetY = Math.max(-0.2, Math.min(0.2, this.gameState.curveOffsetY + norm));
-
-    this.gameState.lastPointerY = e.clientY;
+    this.updateDragIndicator();
   }
 
-  onPointerUp(e) {
-    if (!this.gameState.isPlaying || this.gameState.pressStartTime == null) return;
+  onDragEnd(e) {
+    if (!this.gameState.isPlaying || this.gameState.dragStartTime === 0) return;
 
-    const pressDuration = performance.now() - this.gameState.pressStartTime;
-    this.gameState.pressStartTime = null;
+    const dragTime = performance.now() - this.gameState.dragStartTime;
+    const dragDistance = Math.hypot(
+      this.gameState.dragCurrentX - this.gameState.dragStartX,
+      this.gameState.dragCurrentY - this.gameState.dragStartY
+    );
 
-    const ms = Math.max(100, Math.min(pressDuration, 800));
-    const t = (ms - 100) / (800 - 100);
-    this.gameState.powerFactor = 0.8 + 0.6 * t; // 0.8..1.4
+    // força: combinação de velocidade + distância
+    const velocity = dragDistance / Math.max(dragTime, 50);
+    let power = Math.max(0.8, Math.min(1.6, velocity * 2 + dragDistance * 0.001));
 
-    this.onShootClick(e);
+    this.gameState.dragStartTime = 0;
+    this.hideDragIndicator();
+
+    this.executeDragShot(power);
   }
 
-  onShootClick(e) {
+  showDragIndicator() {
+    this.dragIndicator.classList.add('active');
+    this.dragIndicator.innerHTML = `
+      <div class="drag-line" id="dragLine"></div>
+      <div class="drag-arrow" id="dragArrow"></div>
+      <div class="power-meter" id="powerMeter">
+        <div class="power-fill" id="powerFill"></div>
+      </div>
+    `;
+  }
+
+  updateDragIndicator() {
+    const dx = this.gameState.dragCurrentX - this.gameState.dragStartX;
+    const dy = this.gameState.dragCurrentY - this.gameState.dragStartY;
+    const length = Math.min(200, Math.hypot(dx, dy));
+    const angleRad = Math.atan2(dy, dx);
+    const angleDeg = angleRad * 180 / Math.PI;
+
+    const line = document.getElementById('dragLine');
+    const arrow = document.getElementById('dragArrow');
+    const fill = document.getElementById('powerFill');
+
+    if (line && arrow && fill) {
+      line.style.width = length + 'px';
+      line.style.left = this.gameState.dragStartX + 'px';
+      line.style.top = this.gameState.dragStartY + 'px';
+      line.style.transform = `rotate(${angleDeg}deg)`;
+
+      arrow.style.left =
+        this.gameState.dragStartX + Math.cos(angleRad) * length + 'px';
+      arrow.style.top =
+        this.gameState.dragStartY + Math.sin(angleRad) * length + 'px';
+      arrow.style.transform = `rotate(${angleDeg}deg) translateX(-50%)`;
+
+      const previewPower = Math.max(0.8, Math.min(1.6, length * 0.007));
+      fill.style.width = (previewPower * 50) + '%';
+    }
+  }
+
+  hideDragIndicator() {
+    this.dragIndicator.classList.remove('active');
+    this.dragIndicator.innerHTML = '';
+  }
+
+  executeDragShot(power) {
     const gameRect = this.gameArea.getBoundingClientRect();
     const goalRect = this.goalZone.getBoundingClientRect();
 
-    const clickX = e.clientX;
-    const clickY = e.clientY;
+    const dx = this.gameState.dragCurrentX - this.gameState.dragStartX;
+    const dy = this.gameState.dragCurrentY - this.gameState.dragStartY;
 
-    const withinGoal =
-      clickX >= goalRect.left &&
-      clickX <= goalRect.right &&
-      clickY >= goalRect.top &&
-      clickY <= goalRect.bottom;
+    // distância inicial do centro do gol para risco de chute pra fora
+    const goalCenterX = goalRect.left - gameRect.left + goalRect.width / 2;
+    const goalCenterY = goalRect.top - gameRect.top + goalRect.height / 2;
+    const distToGoal = Math.hypot(
+      this.gameState.dragStartX - goalCenterX,
+      this.gameState.dragStartY - goalCenterY
+    );
+    const outRisk = Math.min(1, distToGoal / (goalRect.width * 0.6));
 
-    if (!withinGoal) {
+    // chance de fora proporcional à distância
+    if (Math.random() < outRisk * 0.3) {
       this.gameState.isPlaying = false;
-      this.statusEl.textContent = 'Chute fora!';
+      this.statusEl.textContent = 'Chute fraco/fora!';
       this.statusEl.style.color = '#f97316';
-      this.animateShot(gameRect, clickX, clickY);
       this.gameState.currentStreak = 0;
-      this.updateStatsHUD();
+      this.animateShot(gameRect, this.gameState.dragCurrentX + gameRect.left, this.gameState.dragCurrentY + gameRect.top);
       this.nextAttempt();
       return;
     }
 
-    const relX = (clickX - goalRect.left) / goalRect.width;
-    let relY = (clickY - goalRect.top) / goalRect.height;
+    // mapeia para coordenada contínua dentro do gol
+    let targetRelX = 0.5 + (dx / 800); // leve variação horizontal
+    let targetRelY = 0.5 + (dy / 600) * 0.4; // arrastar pra cima = mais alto (y menor visual, mas aqui normalizamos)
 
-    // efeito de curva vertical
-    relY = Math.max(0, Math.min(1, relY + this.gameState.curveOffsetY));
-    this.gameState.curveOffsetY = 0;
+    targetRelX = Math.max(0.05, Math.min(0.95, targetRelX));
+    targetRelY = Math.max(0.05, Math.min(0.95, targetRelY));
 
-    this.gameState.shotX = relX;
-    this.gameState.shotY = relY;
-    this.gameState.shotZone = this.getZoneFromCoords(relX, relY);
+    const targetX = goalRect.left - gameRect.left + targetRelX * goalRect.width;
+    const targetY = goalRect.top - gameRect.top + targetRelY * goalRect.height;
+
+    this.gameState.shotX = targetRelX;
+    this.gameState.shotY = targetRelY;
+    this.gameState.shotZone = this.getZoneFromCoords(targetRelX, targetRelY);
     this.gameState.isPlaying = false;
+    this.gameState.powerFactor = power;
 
+    // registra direção para IA
     let dir = 'C';
-    if (relX < 1 / 3) dir = 'E';
-    else if (relX > 2 / 3) dir = 'D';
-
+    if (targetRelX < 1/3) dir = 'E';
+    else if (targetRelX > 2/3) dir = 'D';
     this.gameState.shotsHistory.push(dir);
     if (this.gameState.shotsHistory.length > 10) {
       this.gameState.shotsHistory.shift();
     }
     this.updateStatsHUD();
 
-    this.targetIndicator.style.left = `${clickX - gameRect.left - 12}px`;
-    this.targetIndicator.style.top = `${clickY - gameRect.top - 12}px`;
+    this.targetIndicator.style.left = `${targetX - 12}px`;
+    this.targetIndicator.style.top = `${targetY - 12}px`;
     this.targetIndicator.classList.add('active');
 
-    this.animateShot(gameRect, clickX, clickY);
+    this.animateShot(gameRect, targetX + gameRect.left, targetY + gameRect.top);
     setTimeout(() => this.goalieReaction(), 200);
   }
 
   animateShot(gameRect, targetX, targetY) {
     const startX = gameRect.width / 2;
     const startY = gameRect.height;
+    const power = this.gameState.powerFactor || 1;
 
     this.ball.style.opacity = '1';
     this.ball.style.left = `${startX - 22}px`;
@@ -267,9 +346,7 @@ class PenaltyGame {
 
     const deltaX = targetX - (gameRect.left + startX);
     const deltaY = targetY - (gameRect.top + startY);
-
-    const power = this.gameState.powerFactor || 1;
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const distance = Math.hypot(deltaX, deltaY);
 
     const baseDuration = Math.max(450, Math.min(850, distance * 0.65));
     const duration = baseDuration / power;
@@ -290,6 +367,7 @@ class PenaltyGame {
     );
   }
 
+  // ===== IA / ZONAS =====
   getZoneFromCoords(x, y) {
     let col = Math.floor(x / this.colWidth);
     let row = Math.floor(y / this.rowHeight);
@@ -309,7 +387,6 @@ class PenaltyGame {
 
     if (col > 0) neighbors.push(zone - 1);
     if (col < this.gridCols - 1) neighbors.push(zone + 1);
-
     if (row > 0) neighbors.push(zone - this.gridCols);
     if (row < this.gridRows - 1) neighbors.push(zone + this.gridCols);
 
@@ -335,21 +412,16 @@ class PenaltyGame {
     }
 
     let chosenZone;
-
     if (!shotZone) {
-      const allZones = Array.from({ length: 15 }, (_, i) => i + 1);
-      chosenZone = allZones[Math.floor(Math.random() * allZones.length)];
+      chosenZone = Math.floor(Math.random() * 15) + 1;
     } else {
       const neighbors = this.getNeighborZones(shotZone);
       const weighted = [];
 
       for (let i = 0; i < 6; i++) weighted.push(shotZone);
-
       neighbors
         .filter((z) => z !== shotZone)
-        .forEach((z) => {
-          for (let i = 0; i < 3; i++) weighted.push(z);
-        });
+        .forEach((z) => { for (let i = 0; i < 3; i++) weighted.push(z); });
 
       const allZones = Array.from({ length: 15 }, (_, i) => i + 1);
       allZones
@@ -358,10 +430,9 @@ class PenaltyGame {
 
       if (favoriteSide) {
         const boost = Math.max(1, Math.round(this.aiConfig.studyFactor * 10));
-
-        const leftZones  = [1, 2, 6, 7, 11, 12];
-        const centerZones = [3, 8, 13];
-        const rightZones = [4, 5, 9, 10, 14, 15];
+        const leftZones  = [1,2,6,7,11,12];
+        const centerZones = [3,8,13];
+        const rightZones = [4,5,9,10,14,15];
 
         const sideZones =
           favoriteSide === 'left' ? leftZones :
@@ -450,14 +521,13 @@ class PenaltyGame {
 
   getDefendedZonesForGoalieZone(zone) {
     switch (zone) {
-      case 1: return [1, 2];
-      case 5: return [5, 4];
-      case 6: return [6, 7];
+      case 1:  return [1, 2];
+      case 5:  return [5, 4];
+      case 6:  return [6, 7];
       case 10: return [10, 9];
       case 11: return [11, 12];
       case 15: return [15, 14];
-      default:
-        return [zone];
+      default: return [zone];
     }
   }
 
@@ -472,7 +542,6 @@ class PenaltyGame {
 
     const centerX = (base.minX + base.maxX) / 2;
     const centerY = (base.minY + base.maxY) / 2;
-
     const halfWidth = (base.maxX - base.minX) / 2 * grow;
     const halfHeight = (base.maxY - base.minY) / 2 * grow;
 
@@ -504,22 +573,11 @@ class PenaltyGame {
       this.playerScoreEl.textContent = this.gameState.playerScore;
       this.statusEl.textContent = 'GOL!';
       this.statusEl.style.color = '#10b981';
-
-      if (this.canVibrate) navigator.vibrate(40);
-
-      this.gameState.currentStreak++;
-      if (this.gameState.currentStreak > this.gameState.bestStreak) {
-        this.gameState.bestStreak = this.gameState.currentStreak;
-        this.saveStatsToStorage();
-      }
-      this.updateStatsHUD();
-
       this.nextAttempt();
       return;
     }
 
     const rect = this.getInflatedGoalieRect(goalieZone);
-
     const defended =
       shotX >= rect.minX &&
       shotX <= rect.maxX &&
@@ -531,25 +589,11 @@ class PenaltyGame {
       this.goalieScoreEl.textContent = this.gameState.goalieScore;
       this.statusEl.textContent = 'DEFESA!';
       this.statusEl.style.color = '#ef4444';
-
-      if (this.canVibrate) navigator.vibrate([30, 40, 30]);
-
-      this.gameState.currentStreak = 0;
-      this.updateStatsHUD();
     } else {
       this.gameState.playerScore++;
       this.playerScoreEl.textContent = this.gameState.playerScore;
       this.statusEl.textContent = 'GOL!';
       this.statusEl.style.color = '#10b981';
-
-      if (this.canVibrate) navigator.vibrate(40);
-
-      this.gameState.currentStreak++;
-      if (this.gameState.currentStreak > this.gameState.bestStreak) {
-        this.gameState.bestStreak = this.gameState.currentStreak;
-        this.saveStatsToStorage();
-      }
-      this.updateStatsHUD();
     }
 
     this.nextAttempt();
@@ -594,36 +638,35 @@ class PenaltyGame {
   }
 
   endGame() {
-    const playerWon = this.gameState.playerScore > this.gameState.goalieScore;
-
-    this.statusEl.innerHTML = `
-      ${playerWon ? '🏆 VITÓRIA!' : '😤 Derrota!'}
-      Final: ${this.gameState.playerScore} x ${this.gameState.goalieScore}
-    `;
+    this.statusEl.innerHTML =
+      `${this.gameState.playerScore > this.gameState.goalieScore ? '🏆 VITÓRIA!' : '😤 Derrota!'} ` +
+      `Final: ${this.gameState.playerScore} x ${this.gameState.goalieScore}`;
     this.restartBtn.style.display = 'block';
-
-    if (playerWon) {
-      this.gameState.seriesWon++;
-      this.saveStatsToStorage();
-    }
-    this.updateStatsHUD();
   }
 
   restart() {
-    this.gameState.playerScore = 0;
-    this.gameState.goalieScore = 0;
-    this.gameState.currentAttempt = 1;
-    this.gameState.countdown = 3;
-    this.gameState.isPlaying = false;
-    this.gameState.shotX = null;
-    this.gameState.shotY = null;
-    this.gameState.shotZone = null;
-    this.gameState.goalieZone = null;
-
-    this.gameState.currentStreak = 0;
-    this.gameState.shotsHistory = [];
-    this.gameState.powerFactor = 1;
-    this.gameState.curveOffsetY = 0;
+    this.gameState = {
+      playerScore: 0,
+      goalieScore: 0,
+      currentAttempt: 1,
+      totalAttempts: 5,
+      countdown: 3,
+      isPlaying: false,
+      shotX: null,
+      shotY: null,
+      shotZone: null,
+      goalieZone: null,
+      shotsHistory: [],
+      currentStreak: 0,
+      seriesWon: this.gameState.seriesWon || 0,
+      bestStreak: this.gameState.bestStreak || 0,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragStartTime: 0,
+      dragCurrentX: 0,
+      dragCurrentY: 0,
+      powerFactor: 1
+    };
 
     this.playerScoreEl.textContent = '0';
     this.goalieScoreEl.textContent = '0';
@@ -647,53 +690,6 @@ class PenaltyGame {
 
     this.updateStatsHUD();
     this.startCountdown();
-  }
-
-  createZoneOverlays() {
-    const makeOverlays = () => {
-      this.zoneOverlays.forEach((el) => el.remove());
-      this.zoneOverlays = [];
-
-      const goalRect = this.goalZone.getBoundingClientRect();
-      const gameRect = this.gameArea.getBoundingClientRect();
-
-      const toPxRect = (minX, maxX, minY, maxY) => {
-        const x = goalRect.left - gameRect.left + minX * goalRect.width;
-        const y = goalRect.top - gameRect.top + minY * goalRect.height;
-        const w = (maxX - minX) * goalRect.width;
-        const h = (maxY - minY) * goalRect.height;
-        return { x, y, w, h };
-      };
-
-      for (let zone = 1; zone <= 15; zone++) {
-        const base = this.getZoneRect(zone);
-        const { x, y, w, h } = toPxRect(base.minX, base.maxX, base.minY, base.maxY);
-
-        const div = document.createElement('div');
-        div.className = 'zone-overlay';
-
-        const col = (zone - 1) % this.gridCols;
-        const colors = [
-          'rgba(59,130,246,0.18)',
-          'rgba(56,189,248,0.18)',
-          'rgba(16,185,129,0.18)',
-          'rgba(251,191,36,0.18)',
-          'rgba(239,68,68,0.18)'
-        ];
-        div.style.backgroundColor = colors[col];
-
-        div.style.left = `${x}px`;
-        div.style.top = `${y}px`;
-        div.style.width = `${w}px`;
-        div.style.height = `${h}px`;
-
-        this.gameArea.appendChild(div);
-        this.zoneOverlays.push(div);
-      }
-    };
-
-    setTimeout(makeOverlays, 50);
-    window.addEventListener('resize', () => setTimeout(makeOverlays, 50));
   }
 }
 
