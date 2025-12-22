@@ -1,33 +1,45 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pênalti Master - PWA</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
-  <meta name="theme-color" content="#1e3a8a">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jogo de Pênalti</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="gameContainer">
     <header class="hud">
-      <div class="score">Gols: <span id="playerScore">0</span> x <span id="goalieScore">0</span></div>
-      <div id="countdown" class="countdown">3</div>
-      <div id="status">Toque e arraste para mirar!</div>
-      <div class="progress">
-        <span>Pênaltis: <span id="attempts">1</span>/5</div>
+      <div class="score">Você: <span id="playerScore">0</span></div>
+      <div class="score">Goleiro: <span id="goalieScore">0</span></div>
+      <div>Penal: <span id="attempts">1</span>/5</div>
+      <div id="countdown" class="countdown"></div>
+
+      <select id="difficultySelect" class="difficulty">
+        <option value="easy">Fácil</option>
+        <option value="medium" selected>Médio</option>
+        <option value="hard">Difícil</option>
+      </select>
+
+      <div id="shotHistory" class="hud-sub">
+        Últimos chutes: -
       </div>
+      <div id="streakInfo" class="hud-sub">
+        Séries vencidas: <span id="seriesWon">0</span> | Recorde gols seguidos: <span id="bestStreak">0</span>
+      </div>
+
+      <div id="status"></div>
     </header>
-    
+
     <main id="gameArea">
-      <div id="goalZone"></div>
-      <div id="goalkeeper"></div>
+      <div id="goalZone">
+        <div id="goalkeeper" class="goalkeeper-center"></div>
+      </div>
       <div id="ball"></div>
       <div id="targetIndicator"></div>
     </main>
-    
+
     <footer>
-      <button id="restartBtn" style="display:none;">Nova Série</button>
+      <button id="restartBtn" style="display:none;">Jogar novamente</button>
     </footer>
   </div>
 

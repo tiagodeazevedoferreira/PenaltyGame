@@ -1,16 +1,24 @@
 class PenaltyGame {
+
   constructor() {
     this.gameArea = document.getElementById('gameArea');
     this.goalZone = document.getElementById('goalZone');
     this.goalkeeper = document.getElementById('goalkeeper');
     this.ball = document.getElementById('ball');
     this.targetIndicator = document.getElementById('targetIndicator');
+
     this.playerScoreEl = document.getElementById('playerScore');
     this.goalieScoreEl = document.getElementById('goalieScore');
     this.countdownEl = document.getElementById('countdown');
     this.statusEl = document.getElementById('status');
     this.attemptsEl = document.getElementById('attempts');
     this.restartBtn = document.getElementById('restartBtn');
+
+    this.shotHistoryEl = document.getElementById('shotHistory');
+    this.seriesWonEl = document.getElementById('seriesWon');
+    this.bestStreakEl = document.getElementById('bestStreak');
+
+    this.difficultySelect = document.getElementById('difficultySelect');
 
     // grade 3x5 (15 zonas)
     this.gridCols = 5;
@@ -28,25 +36,110 @@ class PenaltyGame {
       shotX: null,
       shotY: null,
       shotZone: null,   // 1..15
-      goalieZone: null  // 1..15
+      goalieZone: null, // 1..15
+      shotsHistory: [],  // últimas direções: E/C/D
+      currentStreak: 0,  // gols seguidos na série atual
+      seriesWon: 0,      // séries vencidas acumuladas
+      bestStreak: 0,     // recorde global (localStorage)
+      pressStartTime: null,
+      lastPointerY: null,
+      powerFactor: 1,
+      curveOffsetY: 0
+    };
+
+    this.aiConfig = {
+      difficulty: 'medium',
+      reactionDelayMs: 400,
+      growMultiplier: 1,
+      studyFactor: 0.4,
+      historyWindow: 10
     };
 
     this.zoneOverlays = [];
+    this.canVibrate = 'vibrate' in navigator;
 
+    this.loadStatsFromStorage();
     this.init();
-    this.createZoneOverlays();
+    this.updateStatsHUD();
+    // this.createZoneOverlays(); // overlays desativados
   }
 
   init() {
-    this.gameArea.addEventListener('pointerdown', (e) => this.onShootClick(e));
+    this.gameArea.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    this.gameArea.addEventListener('pointermove', (e) => this.onPointerMove(e));
+    this.gameArea.addEventListener('pointerup',   (e) => this.onPointerUp(e));
+    this.gameArea.addEventListener('pointercancel', (e) => this.onPointerUp(e));
+
     this.restartBtn.addEventListener('click', () => this.restart());
+
+    if (this.difficultySelect) {
+      this.difficultySelect.addEventListener('change', (e) =>
+        this.changeDifficulty(e.target.value)
+      );
+    }
+
+    this.changeDifficulty('medium');
     this.startNewAttempt();
   }
 
-  // 10% por tentativa
+  changeDifficulty(level) {
+    this.aiConfig.difficulty = level;
+
+    if (level === 'easy') {
+      this.aiConfig.reactionDelayMs = 550;
+      this.aiConfig.growMultiplier = 0.8;
+      this.aiConfig.studyFactor = 0.2;
+    } else if (level === 'hard') {
+      this.aiConfig.reactionDelayMs = 250;
+      this.aiConfig.growMultiplier = 1.3;
+      this.aiConfig.studyFactor = 0.6;
+    } else {
+      this.aiConfig.reactionDelayMs = 400;
+      this.aiConfig.growMultiplier = 1.0;
+      this.aiConfig.studyFactor = 0.4;
+    }
+
+    if (this.difficultySelect) {
+      this.difficultySelect.value = level;
+    }
+  }
+
+  loadStatsFromStorage() {
+    const storedSeriesWon = localStorage.getItem('pg_seriesWon');
+    const storedBestStreak = localStorage.getItem('pg_bestStreak');
+
+    if (storedSeriesWon !== null) {
+      this.gameState.seriesWon = parseInt(storedSeriesWon, 10) || 0;
+    }
+    if (storedBestStreak !== null) {
+      this.gameState.bestStreak = parseInt(storedBestStreak, 10) || 0;
+    }
+  }
+
+  saveStatsToStorage() {
+    localStorage.setItem('pg_seriesWon', this.gameState.seriesWon.toString());
+    localStorage.setItem('pg_bestStreak', this.gameState.bestStreak.toString());
+  }
+
+  updateStatsHUD() {
+    if (!this.shotHistoryEl || !this.seriesWonEl || !this.bestStreakEl) return;
+
+    if (this.gameState.shotsHistory.length === 0) {
+      this.shotHistoryEl.textContent = 'Últimos chutes: -';
+    } else {
+      this.shotHistoryEl.textContent =
+        'Últimos chutes: ' + this.gameState.shotsHistory.join(', ');
+    }
+
+    this.seriesWonEl.textContent = this.gameState.seriesWon;
+    this.bestStreakEl.textContent = this.gameState.bestStreak;
+  }
+
+  // 10% por tentativa, escalado pela dificuldade
   getCurrentGrowFactor() {
     const attemptIndex = this.gameState.currentAttempt - 1;
-    return 1 + 0.1 * attemptIndex;
+    const base = 1 + 0.1 * attemptIndex;
+    return base * this.aiConfig.growMultiplier;
   }
 
   startCountdown() {
@@ -58,6 +151,7 @@ class PenaltyGame {
 
     const countdown = setInterval(() => {
       this.gameState.countdown--;
+
       if (this.gameState.countdown > 0) {
         this.countdownEl.textContent = this.gameState.countdown;
         this.countdownEl.style.transform = 'scale(1.2)';
@@ -66,19 +160,53 @@ class PenaltyGame {
         clearInterval(countdown);
         this.countdownEl.textContent = 'VAI!';
         this.countdownEl.style.color = '#10b981';
+
         setTimeout(() => {
           this.countdownEl.style.display = 'none';
-          this.statusEl.textContent = 'Toque em qualquer ponto do gol.';
+          this.statusEl.textContent = 'Toque e arraste para chutar.';
         }, 800);
       }
     }, 1000);
   }
 
-  onShootClick(e) {
+  // CONTROLES DE CHUTE (pressão e arrasto)
+  onPointerDown(e) {
     if (!this.gameState.isPlaying) return;
 
+    this.gameState.pressStartTime = performance.now();
+    this.gameState.lastPointerY = e.clientY;
+    this.gameState.curveOffsetY = 0;
+  }
+
+  onPointerMove(e) {
+    if (!this.gameState.isPlaying || this.gameState.pressStartTime == null) return;
+
+    const gameRect = this.gameArea.getBoundingClientRect();
+    const deltaY = e.clientY - this.gameState.lastPointerY;
+
+    const norm = deltaY / gameRect.height;
+    this.gameState.curveOffsetY = Math.max(-0.2, Math.min(0.2, this.gameState.curveOffsetY + norm));
+
+    this.gameState.lastPointerY = e.clientY;
+  }
+
+  onPointerUp(e) {
+    if (!this.gameState.isPlaying || this.gameState.pressStartTime == null) return;
+
+    const pressDuration = performance.now() - this.gameState.pressStartTime;
+    this.gameState.pressStartTime = null;
+
+    const ms = Math.max(100, Math.min(pressDuration, 800));
+    const t = (ms - 100) / (800 - 100);
+    this.gameState.powerFactor = 0.8 + 0.6 * t; // 0.8..1.4
+
+    this.onShootClick(e);
+  }
+
+  onShootClick(e) {
     const gameRect = this.gameArea.getBoundingClientRect();
     const goalRect = this.goalZone.getBoundingClientRect();
+
     const clickX = e.clientX;
     const clickY = e.clientY;
 
@@ -89,25 +217,38 @@ class PenaltyGame {
       clickY <= goalRect.bottom;
 
     if (!withinGoal) {
-      // chute ruim / fora
       this.gameState.isPlaying = false;
       this.statusEl.textContent = 'Chute fora!';
       this.statusEl.style.color = '#f97316';
       this.animateShot(gameRect, clickX, clickY);
+      this.gameState.currentStreak = 0;
+      this.updateStatsHUD();
       this.nextAttempt();
       return;
     }
 
-    // normalizado dentro do gol
     const relX = (clickX - goalRect.left) / goalRect.width;
-    const relY = (clickY - goalRect.top) / goalRect.height;
+    let relY = (clickY - goalRect.top) / goalRect.height;
+
+    // efeito de curva vertical
+    relY = Math.max(0, Math.min(1, relY + this.gameState.curveOffsetY));
+    this.gameState.curveOffsetY = 0;
 
     this.gameState.shotX = relX;
     this.gameState.shotY = relY;
     this.gameState.shotZone = this.getZoneFromCoords(relX, relY);
     this.gameState.isPlaying = false;
 
-    // indicador
+    let dir = 'C';
+    if (relX < 1 / 3) dir = 'E';
+    else if (relX > 2 / 3) dir = 'D';
+
+    this.gameState.shotsHistory.push(dir);
+    if (this.gameState.shotsHistory.length > 10) {
+      this.gameState.shotsHistory.shift();
+    }
+    this.updateStatsHUD();
+
     this.targetIndicator.style.left = `${clickX - gameRect.left - 12}px`;
     this.targetIndicator.style.top = `${clickY - gameRect.top - 12}px`;
     this.targetIndicator.classList.add('active');
@@ -119,63 +260,124 @@ class PenaltyGame {
   animateShot(gameRect, targetX, targetY) {
     const startX = gameRect.width / 2;
     const startY = gameRect.height;
+
     this.ball.style.opacity = '1';
-    this.ball.style.left = `${startX - 20}px`;
-    this.ball.style.top = `${startY - 60}px`;
+    this.ball.style.left = `${startX - 22}px`;
+    this.ball.style.top = `${startY - 66}px`;
 
     const deltaX = targetX - (gameRect.left + startX);
     const deltaY = targetY - (gameRect.top + startY);
 
+    const power = this.gameState.powerFactor || 1;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    const baseDuration = Math.max(450, Math.min(850, distance * 0.65));
+    const duration = baseDuration / power;
+
+    const midX = deltaX * 0.5;
+    const midY = deltaY * 0.5 - 40 * power;
+
     this.ball.animate(
       [
-        { transform: 'translate(0, 0)', offset: 0 },
-        { transform: `translate(${deltaX}px, ${deltaY}px)`, offset: 1 }
+        { transform: 'translate(0, 0) rotate(0deg)', offset: 0 },
+        { transform: `translate(${midX}px, ${midY}px) rotate(450deg)`, offset: 0.5 },
+        { transform: `translate(${deltaX}px, ${deltaY}px) rotate(900deg) scale(0.9)`, offset: 1 }
       ],
-      { duration: 500, easing: 'cubic-bezier(0.25,0.46,0.45,0.94)' }
+      {
+        duration,
+        easing: 'cubic-bezier(0.25,0.46,0.45,0.94)'
+      }
     );
   }
 
-  // converte (x,y) normalizado em zona 1..15
   getZoneFromCoords(x, y) {
     let col = Math.floor(x / this.colWidth);
     let row = Math.floor(y / this.rowHeight);
+
     if (col < 0) col = 0;
     if (col > this.gridCols - 1) col = this.gridCols - 1;
     if (row < 0) row = 0;
     if (row > this.gridRows - 1) row = this.gridRows - 1;
+
     return row * this.gridCols + col + 1;
   }
 
+  getNeighborZones(zone) {
+    const neighbors = [zone];
+    const row = Math.floor((zone - 1) / this.gridCols);
+    const col = (zone - 1) % this.gridCols;
+
+    if (col > 0) neighbors.push(zone - 1);
+    if (col < this.gridCols - 1) neighbors.push(zone + 1);
+
+    if (row > 0) neighbors.push(zone - this.gridCols);
+    if (row < this.gridRows - 1) neighbors.push(zone + this.gridCols);
+
+    return neighbors;
+  }
+
   goalieReaction() {
-    // --- prioridades com novos pesos ---
-    const priority1 = [6, 11, 10, 15];  // peso 4
-    const priority2 = [1, 5];           // peso 3
-    const priority3 = [3, 13];          // peso 2
-    const allZones = Array.from({ length: 15 }, (_, i) => i + 1);
+    const shotZone = this.gameState.shotZone;
 
-    const p1 = new Set(priority1);
-    const p2 = new Set(priority2);
-    const p3 = new Set(priority3);
+    const recent = this.gameState.shotsHistory.slice(-this.aiConfig.historyWindow);
+    let countE = 0, countC = 0, countD = 0;
+    recent.forEach((d) => {
+      if (d === 'E') countE++;
+      else if (d === 'D') countD++;
+      else countC++;
+    });
 
-    const priority4 = allZones.filter((z) => !p1.has(z) && !p2.has(z) && !p3.has(z));
-    // priority4 inclui zona 8 e as que não foram citadas
+    let favoriteSide = null;
+    if (recent.length > 0) {
+      if (countE >= countC && countE >= countD) favoriteSide = 'left';
+      else if (countD >= countE && countD >= countC) favoriteSide = 'right';
+      else favoriteSide = 'center';
+    }
 
-    const weighted = [];
-    const pushWithWeight = (arr, w) => {
-      arr.forEach((z) => {
-        for (let i = 0; i < w; i++) weighted.push(z);
-      });
-    };
+    let chosenZone;
 
-    pushWithWeight(priority1, 4);
-    pushWithWeight(priority2, 3);
-    pushWithWeight(priority3, 2);
-    pushWithWeight(priority4, 1);
+    if (!shotZone) {
+      const allZones = Array.from({ length: 15 }, (_, i) => i + 1);
+      chosenZone = allZones[Math.floor(Math.random() * allZones.length)];
+    } else {
+      const neighbors = this.getNeighborZones(shotZone);
+      const weighted = [];
 
-    const randomZone = weighted[Math.floor(Math.random() * weighted.length)];
-    this.gameState.goalieZone = randomZone;
+      for (let i = 0; i < 6; i++) weighted.push(shotZone);
 
-    // limpa sprites
+      neighbors
+        .filter((z) => z !== shotZone)
+        .forEach((z) => {
+          for (let i = 0; i < 3; i++) weighted.push(z);
+        });
+
+      const allZones = Array.from({ length: 15 }, (_, i) => i + 1);
+      allZones
+        .filter((z) => !neighbors.includes(z))
+        .forEach((z) => weighted.push(z));
+
+      if (favoriteSide) {
+        const boost = Math.max(1, Math.round(this.aiConfig.studyFactor * 10));
+
+        const leftZones  = [1, 2, 6, 7, 11, 12];
+        const centerZones = [3, 8, 13];
+        const rightZones = [4, 5, 9, 10, 14, 15];
+
+        const sideZones =
+          favoriteSide === 'left' ? leftZones :
+          favoriteSide === 'right' ? rightZones :
+          centerZones;
+
+        sideZones.forEach((z) => {
+          for (let i = 0; i < boost; i++) weighted.push(z);
+        });
+      }
+
+      chosenZone = weighted[Math.floor(Math.random() * weighted.length)];
+    }
+
+    this.gameState.goalieZone = chosenZone;
+
     this.goalkeeper.classList.remove(
       'goalkeeper-left',
       'goalkeeper-right',
@@ -184,7 +386,6 @@ class PenaltyGame {
       'goalkeeper-down'
     );
 
-    // sprites por zona (como definido antes)
     const spriteMap = {
       1: 'goalkeeper-left',
       2: 'goalkeeper-left',
@@ -203,6 +404,7 @@ class PenaltyGame {
       15: 'goalkeeper-right'
     };
 
+    const randomZone = this.gameState.goalieZone;
     const cls = spriteMap[randomZone];
 
     let translateX = -50;
@@ -212,51 +414,45 @@ class PenaltyGame {
     const row = Math.floor(index / this.gridCols);
     const col = index % this.gridCols;
 
-    // altura básica
     if (row === 0) translateY = -68;
     else if (row === 2) translateY = -40;
 
-    // bordas: mão sobrepondo trave
     if (randomZone === 1 || randomZone === 6 || randomZone === 11) {
-      translateX = -150;
+      translateX = -120;
     } else if (randomZone === 5 || randomZone === 10 || randomZone === 15) {
-      translateX = 50;
+      translateX = 20;
     } else {
-      if (col === 0) translateX = -80;
+      if (col === 0) translateX = -85;
       else if (col === 1) translateX = -65;
       else if (col === 2) translateX = -50;
       else if (col === 3) translateX = -35;
-      else if (col === 4) translateX = -20;
+      else if (col === 4) translateX = -15;
     }
 
     if (cls) this.goalkeeper.classList.add(cls);
     this.goalkeeper.style.transform = `translate(${translateX}%, ${translateY}%)`;
 
-    setTimeout(() => this.checkGoal(), 400);
+    setTimeout(() => this.checkGoal(), this.aiConfig.reactionDelayMs);
   }
 
-  // retângulo base da zona 1..15
   getZoneRect(zone) {
     const index = zone - 1;
     const row = Math.floor(index / this.gridCols);
     const col = index % this.gridCols;
+
     const minX = col * this.colWidth;
     const maxX = (col + 1) * this.colWidth;
     const minY = row * this.rowHeight;
     const maxY = (row + 1) * this.rowHeight;
+
     return { minX, maxX, minY, maxY };
   }
 
-  // zonas defensivas e cobertura extra
-  // defesa "principal": 1,3,5,6,8,10,11,13,15
-  // coberturas extras:
-  // 1 cobre 1 e 2; 5 cobre 5 e 4; 6 cobre 6 e 7; 10 cobre 10 e 9;
-  // 11 cobre 11 e 12; 15 cobre 15 e 14.
   getDefendedZonesForGoalieZone(zone) {
     switch (zone) {
-      case 1:  return [1, 2];
-      case 5:  return [5, 4];
-      case 6:  return [6, 7];
+      case 1: return [1, 2];
+      case 5: return [5, 4];
+      case 6: return [6, 7];
       case 10: return [10, 9];
       case 11: return [11, 12];
       case 15: return [15, 14];
@@ -269,7 +465,6 @@ class PenaltyGame {
     const base = this.getZoneRect(zone);
     let grow = this.getCurrentGrowFactor();
 
-    // bordas seguem com alcance lógico maior
     const borderZones = new Set([1, 6, 11, 5, 10, 15]);
     if (borderZones.has(zone)) {
       grow *= 1.2;
@@ -277,6 +472,7 @@ class PenaltyGame {
 
     const centerX = (base.minX + base.maxX) / 2;
     const centerY = (base.minY + base.maxY) / 2;
+
     const halfWidth = (base.maxX - base.minX) / 2 * grow;
     const halfHeight = (base.maxY - base.minY) / 2 * grow;
 
@@ -301,21 +497,29 @@ class PenaltyGame {
       return;
     }
 
-    // zonas efetivamente defendidas por causa da cobertura
     const defendedZones = this.getDefendedZonesForGoalieZone(goalieZone);
 
-    // se a zona do chute não estiver em nenhuma zona defendida, é gol direto
     if (!defendedZones.includes(shotZone)) {
       this.gameState.playerScore++;
       this.playerScoreEl.textContent = this.gameState.playerScore;
       this.statusEl.textContent = 'GOL!';
       this.statusEl.style.color = '#10b981';
+
+      if (this.canVibrate) navigator.vibrate(40);
+
+      this.gameState.currentStreak++;
+      if (this.gameState.currentStreak > this.gameState.bestStreak) {
+        this.gameState.bestStreak = this.gameState.currentStreak;
+        this.saveStatsToStorage();
+      }
+      this.updateStatsHUD();
+
       this.nextAttempt();
       return;
     }
 
-    // se está em zona coberta, ainda passamos pela área (inflada) da zona principal
     const rect = this.getInflatedGoalieRect(goalieZone);
+
     const defended =
       shotX >= rect.minX &&
       shotX <= rect.maxX &&
@@ -327,11 +531,25 @@ class PenaltyGame {
       this.goalieScoreEl.textContent = this.gameState.goalieScore;
       this.statusEl.textContent = 'DEFESA!';
       this.statusEl.style.color = '#ef4444';
+
+      if (this.canVibrate) navigator.vibrate([30, 40, 30]);
+
+      this.gameState.currentStreak = 0;
+      this.updateStatsHUD();
     } else {
       this.gameState.playerScore++;
       this.playerScoreEl.textContent = this.gameState.playerScore;
       this.statusEl.textContent = 'GOL!';
       this.statusEl.style.color = '#10b981';
+
+      if (this.canVibrate) navigator.vibrate(40);
+
+      this.gameState.currentStreak++;
+      if (this.gameState.currentStreak > this.gameState.bestStreak) {
+        this.gameState.bestStreak = this.gameState.currentStreak;
+        this.saveStatsToStorage();
+      }
+      this.updateStatsHUD();
     }
 
     this.nextAttempt();
@@ -376,26 +594,36 @@ class PenaltyGame {
   }
 
   endGame() {
+    const playerWon = this.gameState.playerScore > this.gameState.goalieScore;
+
     this.statusEl.innerHTML = `
-${this.gameState.playerScore > this.gameState.goalieScore ? '🏆 VITÓRIA!' : '😤 Derrota!'}
-Final: ${this.gameState.playerScore} x ${this.gameState.goalieScore}
+      ${playerWon ? '🏆 VITÓRIA!' : '😤 Derrota!'}
+      Final: ${this.gameState.playerScore} x ${this.gameState.goalieScore}
     `;
     this.restartBtn.style.display = 'block';
+
+    if (playerWon) {
+      this.gameState.seriesWon++;
+      this.saveStatsToStorage();
+    }
+    this.updateStatsHUD();
   }
 
   restart() {
-    this.gameState = {
-      playerScore: 0,
-      goalieScore: 0,
-      currentAttempt: 1,
-      totalAttempts: 5,
-      countdown: 3,
-      isPlaying: false,
-      shotX: null,
-      shotY: null,
-      shotZone: null,
-      goalieZone: null
-    };
+    this.gameState.playerScore = 0;
+    this.gameState.goalieScore = 0;
+    this.gameState.currentAttempt = 1;
+    this.gameState.countdown = 3;
+    this.gameState.isPlaying = false;
+    this.gameState.shotX = null;
+    this.gameState.shotY = null;
+    this.gameState.shotZone = null;
+    this.gameState.goalieZone = null;
+
+    this.gameState.currentStreak = 0;
+    this.gameState.shotsHistory = [];
+    this.gameState.powerFactor = 1;
+    this.gameState.curveOffsetY = 0;
 
     this.playerScoreEl.textContent = '0';
     this.goalieScoreEl.textContent = '0';
@@ -417,6 +645,7 @@ Final: ${this.gameState.playerScore} x ${this.gameState.goalieScore}
     this.ball.style.opacity = '0';
     this.targetIndicator.classList.remove('active');
 
+    this.updateStatsHUD();
     this.startCountdown();
   }
 
@@ -439,6 +668,7 @@ Final: ${this.gameState.playerScore} x ${this.gameState.goalieScore}
       for (let zone = 1; zone <= 15; zone++) {
         const base = this.getZoneRect(zone);
         const { x, y, w, h } = toPxRect(base.minX, base.maxX, base.minY, base.maxY);
+
         const div = document.createElement('div');
         div.className = 'zone-overlay';
 

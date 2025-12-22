@@ -51,25 +51,38 @@ header.hud {
   flex: 1;
 }
 
-/* ÁREA DO JOGO – só a trave/goleiro, sem bloco verde cheio */
+.hud-sub {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.difficulty {
+  padding: 0.2rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 0.8rem;
+}
+
+/* ÁREA DO JOGO – só a trave/goleiro */
 #gameArea {
   position: relative;
   cursor: pointer;
   touch-action: manipulation;
   background: transparent;
   overflow: hidden;
-
-  height: 90vh;                 /* ocupa ~90% da viewport abaixo do HUD */
+  height: 90vh;
   display: flex;
-  align-items: center;          /* centraliza horizontalmente */
-  justify-content: center;      /* centraliza verticalmente */
+  align-items: center;
+  justify-content: center;
 }
 
 /* TRAVE centralizada e responsiva */
 #goalZone {
-  position: relative;           /* referência para o goleiro */
-  width: 90vw;                  /* quase toda a largura */
-  max-width: 700px;             /* limite em desktop */
+  position: relative;
+  width: 90vw;
+  max-width: 700px;
   height: auto;
   aspect-ratio: 455 / 185;
   background-image: url('goal.png');
@@ -82,9 +95,9 @@ header.hud {
 #goalkeeper {
   position: absolute;
   left: 50%;
-  top: 55%;                     /* ligeiramente abaixo do centro vertical */
+  top: 55%;
   transform: translate(-50%, -50%);
-  width: 35%;                   /* sempre ~35% da largura da trave */
+  width: 35%;
   height: auto;
   aspect-ratio: 768 / 786;
   background-size: contain;
@@ -118,17 +131,20 @@ header.hud {
 /* BOLA */
 #ball {
   position: absolute;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fff 0%, #f8fafc 30%, #f1f5f9 60%, #e2e8f0 100%);
+  width: 44px;
+  height: 44px;
+  background-image: url('ball.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
   box-shadow:
-    0 8px 25px rgba(0,0,0,0.4),
-    inset 0 4px 12px rgba(255,255,255,0.6),
-    inset 0 -2px 8px rgba(0,0,0,0.3);
-  border: 3px solid #1e293b;
+    0 8px 25px rgba(0,0,0,0.6),
+    0 4px 12px rgba(0,0,0,0.4),
+    inset 0 2px 6px rgba(255,255,255,0.3);
+  border-radius: 50%;
   z-index: 20;
   opacity: 0;
+  transform-origin: center;
 }
 
 /* INDICADOR DE ALVO */
@@ -147,24 +163,6 @@ header.hud {
 #targetIndicator.active {
   opacity: 1;
   transform: scale(1.1);
-}
-
-/* OVERLAYS DAS ZONAS DE DEFESA */
-.zone-overlay {
-  position: absolute;
-  border: 1px solid rgba(148, 163, 184, 0.7);
-  border-radius: 4px;
-  pointer-events: none;
-  z-index: 6; /* acima do gol, abaixo do goleiro e bola */
-}
-
-/* RETÂNGULO DA ÁREA DE CHUTE (opcional) */
-.shot-area {
-  position: absolute;
-  border: 2px dashed rgba(148, 163, 184, 0.9);
-  background: transparent;
-  z-index: 4;
-  pointer-events: none;
 }
 
 /* RODAPÉ */
@@ -200,11 +198,11 @@ footer {
   }
 
   #goalZone {
-    width: 94vw;              /* um pouco maior em celulares */
+    width: 94vw;
   }
 
   #goalkeeper {
-    width: 45%;               /* goleiro ocupa mais da trave em telas pequenas */
+    width: 45%;
   }
 }
 
